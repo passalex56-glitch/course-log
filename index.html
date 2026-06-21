@@ -19,8 +19,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-geo@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 
 <style>
   :root {
@@ -136,14 +136,36 @@
     font-size: 11px; letter-spacing: 0.08em; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .gcl-loading { max-width: 960px; margin: 0 auto; padding: 60px 22px; color: var(--muted); font-family: 'DM Mono', monospace; }
 
-  #gcl-map { height: min(560px, 70vh); border: 1px solid var(--line); border-radius: 4px; z-index: 0; }
+  #gcl-map { width: 100%; border: 1px solid var(--line); border-radius: 4px; padding: 10px;
+    background-color: #ece7da;
+    background-image: radial-gradient(circle, rgba(21,54,43,0.06) 1.4px, transparent 1.6px);
+    background-size: 13px 13px; }
+  #gcl-map svg { display: block; }
+  .gcl-state { fill: #5a9469; stroke: #F3EEE3; stroke-width: 1; }
+  .gcl-statelbl { fill: rgba(255,255,255,0.82); font-family: 'Inter', sans-serif; font-weight: 600;
+    font-size: 7px; letter-spacing: 0.04em; text-anchor: middle; text-transform: uppercase; pointer-events: none; }
+
+  .gcl-mapwrap { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .gcl-mapcol { flex: 1 1 460px; min-width: 0; }
+  .gcl-maptitle { font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(20px, 3vw, 28px);
+    text-align: center; color: var(--ink); margin: 0 0 12px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .gcl-maptitle::before, .gcl-maptitle::after { content: ""; height: 1px; width: 36px; background: var(--brass); }
+  .gcl-maplist { flex: 0 0 230px; border: 1px solid var(--line); border-radius: 4px; background: #FBF8F1;
+    padding: 14px 16px; max-height: 560px; overflow: auto; }
+  @media (max-width: 680px) { .gcl-maplist { flex-basis: 100%; max-height: none; } }
+  .gcl-maplist h4 { font-family: 'Inter', sans-serif; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--brass); margin: 16px 0 8px; }
+  .gcl-maplist h4:first-child { margin-top: 0; }
+  .gcl-maplist ul { list-style: none; margin: 0; padding: 0; }
+  .gcl-maplist li { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; line-height: 1.5; color: var(--ink); }
+  .gcl-maplist .ldot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; transform: translateY(1px); }
+  .gcl-maplist .ldot.played { background: var(--ink); }
+  .gcl-maplist .ldot.wish { background: var(--flag); }
   .gcl-legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--muted); }
   .gcl-legend .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
   .gcl-legend .dot.played { background: var(--ink); }
   .gcl-legend .dot.wish { background: var(--flag); }
-  .gcl-geo { font-family: 'DM Mono', monospace; margin-left: 10px; }
-  .leaflet-popup-content { font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.45; }
-  .leaflet-popup-content strong { font-family: 'Playfair Display', serif; font-size: 15px; }
+  .gcl-geo { font-family: 'DM Mono', monospace; margin-left: 6px; }
 
   /* sign-in + setup */
   .gcl-gate { min-height: 100vh; display: grid; place-items: center; padding: 22px; }
@@ -285,8 +307,18 @@
             <button class="gcl-add" data-action="add">＋ Add course</button>
           </div>
           ${state.tab === "map" ? `
-            <div id="gcl-map"></div>
-            <div class="gcl-legend"><span class="dot played"></span> Played &nbsp;&nbsp; <span class="dot wish"></span> Wishlist <span class="gcl-geo" id="gcl-geo"></span></div>
+            <div class="gcl-mapwrap">
+              <div class="gcl-mapcol">
+                <div class="gcl-maptitle">The Course Log</div>
+                <div id="gcl-map"></div>
+                <div class="gcl-legend"><span class="dot played"></span> Played &nbsp;&nbsp; <span class="dot wish"></span> Wishlist <span class="gcl-geo" id="gcl-geo"></span></div>
+              </div>
+              <aside class="gcl-maplist">
+                <h4>Played (${played.length})</h4>
+                <ul>${played.map((c) => `<li><span class="ldot played"></span><span>${esc(c.name)}${c.location ? `<span style="color:var(--muted)"> — ${esc(c.location)}</span>` : ""}</span></li>`).join("")}</ul>
+                ${wishlist.length ? `<h4>Wishlist (${wishlist.length})</h4><ul>${wishlist.map((c) => `<li><span class="ldot wish"></span><span>${esc(c.name)}${c.location ? `<span style="color:var(--muted)"> — ${esc(c.location)}</span>` : ""}</span></li>`).join("")}</ul>` : ""}
+              </aside>
+            </div>
           ` : shown.length === 0 ? `
             <div class="gcl-empty">
               <h3>${state.tab === "played" ? "No rounds logged yet" : "Nothing on the wishlist yet"}</h3>
@@ -354,61 +386,83 @@
       setTimeout(() => overlay.querySelector("#f-name").focus(), 30);
     }
 
-    /* ---------- map ---------- */
-    let mapInstance = null;
+    /* ---------- map (stylized US poster) ---------- */
     let geocoding = false;
+    let usTopo = null;
+    const geoAttempted = new Set();
 
-    function addMarker(c) {
-      if (!mapInstance) return;
+    async function ensureTopo() {
+      if (usTopo) return usTopo;
+      const r = await fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json");
+      usTopo = await r.json();
+      return usTopo;
+    }
+
+    function flagSVG(x, y, c, title) {
       const color = c.status === "played" ? "#15362B" : "#B23A2E";
-      const m = L.circleMarker([c.lat, c.lng], {
-        radius: 8, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1,
-      }).addTo(mapInstance);
-      const detail = [c.par ? "Par " + c.par : null, c.yardage ? Number(c.yardage).toLocaleString() + " yds" : null].filter(Boolean).join(" · ");
-      m.bindPopup(
-        `<strong>${esc(c.name)}</strong>` +
-        (c.location ? "<br>" + esc(c.location) : "") +
-        (detail ? "<br>" + detail : "") +
-        `<br><em>${c.status === "played" ? "Played" : "Wishlist"}</em>`
-      );
+      return `<g class="gcl-pin" transform="translate(${x.toFixed(1)},${y.toFixed(1)})">
+        <title>${esc(title)}</title>
+        <line x1="0" y1="0" x2="0" y2="-17" stroke="#2b2b2b" stroke-width="1.4"/>
+        <path d="M0,-17 L11,-13 L0,-9 Z" fill="${color}"/>
+        <circle cx="0" cy="0" r="2.6" fill="${color}" stroke="#fff" stroke-width="1.1"/>
+      </g>`;
     }
 
-    function fitToMarkers() {
-      const pts = state.courses.filter((c) => c.lat != null && c.lng != null).map((c) => [c.lat, c.lng]);
-      if (mapInstance && pts.length) mapInstance.fitBounds(pts, { padding: [40, 40], maxZoom: 11 });
-    }
+    async function drawMap() {
+      const host = document.getElementById("gcl-map");
+      if (!host) return;
+      if (typeof d3 === "undefined" || typeof topojson === "undefined") {
+        host.innerHTML = `<p style="padding:28px;color:var(--muted);font-family:'DM Mono',monospace">Map libraries didn't load — check your connection and reopen the Map tab.</p>`;
+        return;
+      }
+      let topo;
+      try { topo = await ensureTopo(); }
+      catch (e) { host.innerHTML = `<p style="padding:28px;color:var(--muted)">Couldn't load the US map data.</p>`; return; }
 
-    function drawMap() {
-      const el = document.getElementById("gcl-map");
-      if (!el || typeof L === "undefined") return;
-      if (mapInstance) { mapInstance.remove(); mapInstance = null; }
-      mapInstance = L.map(el, { scrollWheelZoom: false }).setView([38.5, -90], 5);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors", maxZoom: 18,
-      }).addTo(mapInstance);
-      state.courses.forEach((c) => { if (c.lat != null && c.lng != null) addMarker(c); });
-      fitToMarkers();
-      geocodeMissing();
+      const states = topojson.feature(topo, topo.objects.states);
+      const W = Math.max(320, host.clientWidth || 900);
+      const H = Math.round(W * 0.62);
+      const projection = d3.geoAlbersUsa().fitSize([W - 8, H - 8], states);
+      const path = d3.geoPath(projection);
+
+      let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+      svg += `<g transform="translate(4,4)">`;
+      states.features.forEach((f) => { svg += `<path d="${path(f)}" class="gcl-state"/>`; });
+      states.features.forEach((f) => {
+        const ctr = path.centroid(f);
+        if (ctr && !isNaN(ctr[0])) svg += `<text x="${ctr[0].toFixed(1)}" y="${ctr[1].toFixed(1)}" class="gcl-statelbl">${esc((f.properties && f.properties.name) || "")}</text>`;
+      });
+      state.courses.forEach((c) => {
+        if (c.lat != null && c.lng != null) {
+          const p = projection([c.lng, c.lat]);
+          if (p) svg += flagSVG(p[0], p[1], c, c.name + (c.location ? " — " + c.location : ""));
+        }
+      });
+      svg += `</g></svg>`;
+      host.innerHTML = svg;
+
+      if (!geocoding && state.courses.some((c) => (c.lat == null || c.lng == null) && !geoAttempted.has(c.id))) {
+        geocodeMissing();
+      }
     }
 
     async function geocodeMissing() {
       if (geocoding) return;
-      const todo = state.courses.filter((c) => (c.lat == null || c.lng == null) && (c.location || c.name));
+      const todo = state.courses.filter((c) => (c.lat == null || c.lng == null) && (c.location || c.name) && !geoAttempted.has(c.id));
       if (!todo.length) return;
       geocoding = true;
       const geoEl = document.getElementById("gcl-geo");
       let done = 0;
       for (const c of todo) {
         if (geoEl) geoEl.textContent = `· locating courses… (${done}/${todo.length})`;
+        geoAttempted.add(c.id);
         try {
           const q = encodeURIComponent(c.location ? `${c.name}, ${c.location}` : c.name);
-          const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}&countrycodes=us`);
           const data = await r.json();
           if (data && data[0]) {
             c.lat = parseFloat(data[0].lat);
             c.lng = parseFloat(data[0].lon);
-            addMarker(c);
-            fitToMarkers();
             db.from("courses").update({ lat: c.lat, lng: c.lng }).eq("id", c.id);
           }
         } catch (e) { /* skip this one */ }
@@ -417,6 +471,7 @@
       }
       if (geoEl) geoEl.textContent = "";
       geocoding = false;
+      if (state.tab === "map") drawMap(); // redraw with the new pins
     }
 
     /* ---------- events ---------- */
