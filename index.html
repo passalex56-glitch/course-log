@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Course Log</title>
+
+<!-- ============================================================= -->
+<!--  STEP 1: PASTE YOUR TWO SUPABASE VALUES BETWEEN THE QUOTES.    -->
+<!--  Find them in Supabase: Project Settings > API                 -->
+<!-- ============================================================= -->
+<script>
+  const SUPABASE_URL      = "https://tmjyqichgqfvpeqchrap.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_mi3uf4qeeO-oe7ge2gYz6g_NY5g1Vpd";
+</script>
+<!-- ============================================================= -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --paper: #F3EEE3; --paper-edge: #E8E0D0; --ink: #15362B; --ink-soft: #2C4A3E;
+    --brass: #B08D3F; --flag: #B23A2E; --muted: #6B6256; --line: #D8CFBC;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif; padding-bottom: 64px; }
+
+  .gcl-head { background: var(--ink); color: var(--paper); padding: 34px 22px 30px;
+    border-bottom: 3px solid var(--brass); }
+  .gcl-head-inner { max-width: 960px; margin: 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .gcl-eyebrow { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--brass); font-weight: 600; margin: 0 0 8px; }
+  .gcl-title { font-family: 'Playfair Display', serif; font-weight: 700;
+    font-size: clamp(30px, 6vw, 46px); line-height: 1; margin: 0; }
+  .gcl-stats { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 22px; font-family: 'DM Mono', monospace; }
+  .gcl-stat-num { font-size: 24px; font-weight: 500; }
+  .gcl-stat-lbl { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--brass); font-family: 'Inter', sans-serif; font-weight: 600; margin-top: 2px; }
+  .gcl-signout { appearance: none; background: transparent; border: 1px solid rgba(243,238,227,0.35);
+    color: var(--paper); border-radius: 2px; padding: 6px 11px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.06em; cursor: pointer; white-space: nowrap; }
+  .gcl-signout:hover { border-color: var(--brass); color: var(--brass); }
+
+  .gcl-body { max-width: 960px; margin: 0 auto; padding: 26px 22px 0; }
+  .gcl-barrow { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap; margin-bottom: 22px; }
+  .gcl-tabs { display: inline-flex; border: 1.5px solid var(--ink); border-radius: 2px; overflow: hidden; }
+  .gcl-tab { appearance: none; border: 0; background: transparent; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.04em;
+    padding: 9px 18px; color: var(--ink); display: inline-flex; align-items: center; gap: 7px;
+    transition: background 0.15s, color 0.15s; }
+  .gcl-tab + .gcl-tab { border-left: 1.5px solid var(--ink); }
+  .gcl-tab[data-on="true"] { background: var(--ink); color: var(--paper); }
+
+  .gcl-add { appearance: none; cursor: pointer; border: 0; border-radius: 2px; background: var(--brass);
+    color: var(--ink); font-weight: 600; font-family: 'Inter', sans-serif; font-size: 13px;
+    letter-spacing: 0.03em; padding: 10px 16px; display: inline-flex; align-items: center; gap: 7px;
+    transition: transform 0.12s, filter 0.15s; }
+  .gcl-add:hover { filter: brightness(1.06); }
+  .gcl-add:active { transform: translateY(1px); }
+
+  .gcl-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 620px) { .gcl-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 920px) { .gcl-grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+  .gcl-card { position: relative; background: #FBF8F1; border: 1px solid var(--line); border-radius: 3px;
+    padding: 18px 18px 0; overflow: hidden; box-shadow: 0 1px 0 var(--paper-edge);
+    transition: transform 0.14s, box-shadow 0.14s; }
+  .gcl-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px -14px rgba(21,54,43,0.5); }
+  .gcl-card[data-status="wishlist"] { border-left: 3px solid var(--flag); }
+  .gcl-card[data-status="played"] { border-left: 3px solid var(--ink); }
+
+  .gcl-corner { position: absolute; top: 14px; right: 14px; width: 26px; height: 26px;
+    border-radius: 50%; display: grid; place-items: center; font-size: 13px; }
+  .gcl-corner[data-status="played"] { background: var(--ink); color: var(--paper); }
+  .gcl-corner[data-status="wishlist"] { background: rgba(178,58,46,0.12); color: var(--flag); }
+
+  .gcl-name { font-family: 'Playfair Display', serif; font-weight: 600; font-size: 21px;
+    line-height: 1.12; margin: 0 34px 5px 0; color: var(--ink); }
+  .gcl-loc { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px;
+    letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; margin-bottom: 16px; }
+
+  .gcl-scorecard { display: flex; border-top: 1px solid var(--line); margin: 0 -18px; }
+  .gcl-sc-cell { flex: 1; padding: 11px 18px; }
+  .gcl-sc-cell + .gcl-sc-cell { border-left: 1px solid var(--line); }
+  .gcl-sc-lbl { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .gcl-sc-val { font-family: 'DM Mono', monospace; font-size: 19px; color: var(--ink); margin-top: 2px; }
+  .gcl-sc-val[data-empty="true"] { color: var(--line); }
+
+  .gcl-actions { display: flex; border-top: 1px solid var(--line); margin: 0 -18px; }
+  .gcl-act { flex: 1; appearance: none; border: 0; background: transparent; cursor: pointer; padding: 9px;
+    color: var(--muted); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    transition: background 0.13s, color 0.13s; }
+  .gcl-act + .gcl-act { border-left: 1px solid var(--line); }
+  .gcl-act:hover { background: var(--paper); color: var(--ink); }
+  .gcl-act[data-danger="true"]:hover { color: var(--flag); }
+
+  .gcl-empty { text-align: center; padding: 60px 20px; border: 1.5px dashed var(--line);
+    border-radius: 4px; color: var(--muted); }
+  .gcl-empty h3 { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--ink); margin: 0 0 6px; }
+  .gcl-empty p { margin: 0 0 18px; font-size: 14px; }
+
+  .gcl-overlay { position: fixed; inset: 0; background: rgba(21,54,43,0.42); display: grid;
+    place-items: center; padding: 18px; z-index: 50; }
+  .gcl-modal { width: 100%; max-width: 420px; background: var(--paper); border-radius: 4px;
+    border-top: 4px solid var(--brass); padding: 24px; box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5); }
+  .gcl-modal h2 { font-family: 'Playfair Display', serif; font-size: 24px; margin: 0 0 18px; color: var(--ink); }
+  .gcl-field { margin-bottom: 14px; }
+  .gcl-field label { display: block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+  .gcl-input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 2px;
+    background: #FBF8F1; color: var(--ink); font-family: 'Inter', sans-serif; font-size: 14px; }
+  .gcl-input:focus { outline: 2px solid var(--brass); outline-offset: 1px; border-color: var(--brass); }
+  .gcl-row2 { display: flex; gap: 12px; }
+  .gcl-row2 > * { flex: 1; }
+  .gcl-seg { display: flex; gap: 8px; }
+  .gcl-seg button { flex: 1; appearance: none; cursor: pointer; padding: 10px; border-radius: 2px;
+    border: 1.5px solid var(--line); background: #FBF8F1; color: var(--muted); font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 13px; }
+  .gcl-seg button[data-on="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+  .gcl-modal-actions { display: flex; gap: 10px; margin-top: 22px; }
+  .gcl-btn-primary, .gcl-btn-ghost { flex: 1; appearance: none; cursor: pointer; padding: 11px; border-radius: 2px;
+    font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px; }
+  .gcl-btn-primary { border: 0; background: var(--ink); color: var(--paper); }
+  .gcl-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gcl-btn-ghost { border: 1.5px solid var(--line); background: transparent; color: var(--ink); }
+
+  .gcl-reset { display: block; margin: 36px auto 0; background: transparent; border: 0; color: var(--muted);
+    font-size: 11px; letter-spacing: 0.08em; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .gcl-loading { max-width: 960px; margin: 0 auto; padding: 60px 22px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  /* sign-in + setup */
+  .gcl-gate { min-height: 100vh; display: grid; place-items: center; padding: 22px; }
+  .gcl-gate-card { width: 100%; max-width: 400px; text-align: center; }
+  .gcl-gate h1 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 40px; margin: 0 0 6px; color: var(--ink); }
+  .gcl-gate p { color: var(--muted); line-height: 1.6; margin: 0 0 22px; }
+  .gcl-gate .gcl-input { text-align: center; margin-bottom: 12px; }
+  .gcl-gate .gcl-btn-primary { width: 100%; }
+  .gcl-gate code { background: #FBF8F1; border: 1px solid var(--line); border-radius: 2px;
+    padding: 1px 6px; font-family: 'DM Mono', monospace; font-size: 13px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gcl-card, .gcl-add, .gcl-tab, .gcl-act { transition: none !important; }
+    .gcl-card:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const root = document.getElementById("root");
+  const configured = SUPABASE_URL && !SUPABASE_URL.includes("PASTE_") &&
+                     SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("PASTE_");
+
+  const fmt = (n) => (n == null || n === "" ? "—" : Number(n).toLocaleString());
+  const esc = (s) => (s ?? "").toString()
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+  if (!configured) {
+    root.innerHTML = `
+      <div class="gcl-gate"><div class="gcl-gate-card">
+        <p class="gcl-eyebrow">Personal Golf Log</p>
+        <h1>The Course Log</h1>
+        <p>Not connected to your database yet. Paste your Supabase <code>URL</code> and
+        <code>anon key</code> into the two blanks near the top of this file, then redeploy.</p>
+      </div></div>`;
+  } else {
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const state = { courses: [], tab: "played", loading: true };
+    let session = null;
+    let subscribed = false;
+
+    /* ---------- auth gate ---------- */
+    function renderAuth(sent) {
+      root.innerHTML = `
+        <div class="gcl-gate"><div class="gcl-gate-card">
+          <p class="gcl-eyebrow">Personal Golf Log</p>
+          <h1>The Course Log</h1>
+          ${sent ? `
+            <p>Check your email — we sent a sign-in link to <strong>${esc(sent)}</strong>.
+            Open it on this device to enter your log.</p>
+            <button class="gcl-btn-ghost" id="g-again" style="width:100%">Use a different email</button>
+          ` : `
+            <p>Sign in with your email to open your log. We'll send a one-tap link — no password.</p>
+            <input id="g-email" class="gcl-input" type="email" inputmode="email" placeholder="you@email.com" autofocus>
+            <button class="gcl-btn-primary" id="g-send">Send sign-in link</button>
+          `}
+        </div></div>`;
+      if (sent) {
+        root.querySelector("#g-again").onclick = () => renderAuth();
+      } else {
+        const send = async () => {
+          const email = root.querySelector("#g-email").value.trim();
+          if (!email) return;
+          const btn = root.querySelector("#g-send");
+          btn.disabled = true; btn.textContent = "Sending…";
+          const { error } = await db.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+          if (error) { alert("Couldn't send link: " + error.message); btn.disabled = false; btn.textContent = "Send sign-in link"; }
+          else { renderAuth(email); }
+        };
+        root.querySelector("#g-send").onclick = send;
+        root.querySelector("#g-email").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+      }
+    }
+
+    /* ---------- data ---------- */
+    async function fetchCourses() {
+      const { data, error } = await db.from("courses").select("*").order("created_at", { ascending: true });
+      if (!error) state.courses = data || [];
+      state.loading = false;
+      render();
+    }
+    async function addCourse(rec)         { const { error } = await db.from("courses").insert(rec);              if (error) alert("Couldn't save: " + error.message); else fetchCourses(); }
+    async function patchCourse(id, patch) { const { error } = await db.from("courses").update(patch).eq("id", id); if (error) alert("Couldn't update: " + error.message); else fetchCourses(); }
+    async function removeCourse(id)       { const { error } = await db.from("courses").delete().eq("id", id);     if (error) alert("Couldn't delete: " + error.message); else fetchCourses(); }
+
+    /* ---------- views ---------- */
+    function card(c) {
+      const corner = c.status === "played" ? "✓" : "⚑";
+      const moveLabel = c.status === "played" ? "⚑ To wishlist" : "✓ Mark played";
+      return `
+        <article class="gcl-card" data-status="${c.status}">
+          <div class="gcl-corner" data-status="${c.status}">${corner}</div>
+          <h2 class="gcl-name">${esc(c.name)}</h2>
+          <div class="gcl-loc"${c.location ? "" : ' style="opacity:.5"'}>📍 ${esc(c.location || "Location not set")}</div>
+          <div class="gcl-scorecard">
+            <div class="gcl-sc-cell"><div class="gcl-sc-lbl">Par</div>
+              <div class="gcl-sc-val" data-empty="${c.par == null}">${c.par == null ? "—" : c.par}</div></div>
+            <div class="gcl-sc-cell"><div class="gcl-sc-lbl">Yards</div>
+              <div class="gcl-sc-val" data-empty="${c.yardage == null}">${fmt(c.yardage)}</div></div>
+          </div>
+          <div class="gcl-actions">
+            <button class="gcl-act" data-action="move" data-id="${c.id}">${moveLabel}</button>
+            <button class="gcl-act" data-action="edit" data-id="${c.id}">✎ Edit</button>
+            <button class="gcl-act" data-danger="true" data-action="delete" data-id="${c.id}">🗑 Delete</button>
+          </div>
+        </article>`;
+    }
+
+    function render() {
+      const played = state.courses.filter((c) => c.status === "played");
+      const wishlist = state.courses.filter((c) => c.status === "wishlist");
+      const shown = state.tab === "played" ? played : wishlist;
+      const totalYards = played.reduce((s, c) => s + (c.yardage || 0), 0);
+
+      root.innerHTML = `
+        <div class="gcl-head"><div class="gcl-head-inner">
+          <div>
+            <p class="gcl-eyebrow">Personal Golf Log</p>
+            <h1 class="gcl-title">The Course Log</h1>
+            <div class="gcl-stats">
+              <div><div class="gcl-stat-num">${played.length}</div><div class="gcl-stat-lbl">Played</div></div>
+              <div><div class="gcl-stat-num">${wishlist.length}</div><div class="gcl-stat-lbl">Want to play</div></div>
+              <div><div class="gcl-stat-num">${fmt(totalYards)}</div><div class="gcl-stat-lbl">Yards played</div></div>
+            </div>
+          </div>
+          <button class="gcl-signout" data-action="signout">Sign out</button>
+        </div></div>
+        ${state.loading ? `<div class="gcl-loading">Opening the logbook…</div>` : `
+        <div class="gcl-body">
+          <div class="gcl-barrow">
+            <div class="gcl-tabs">
+              <button class="gcl-tab" data-on="${state.tab === "played"}" data-tab="played">✓ Played</button>
+              <button class="gcl-tab" data-on="${state.tab === "wishlist"}" data-tab="wishlist">⚑ Wishlist</button>
+            </div>
+            <button class="gcl-add" data-action="add">＋ Add course</button>
+          </div>
+          ${shown.length === 0 ? `
+            <div class="gcl-empty">
+              <h3>${state.tab === "played" ? "No rounds logged yet" : "Nothing on the wishlist yet"}</h3>
+              <p>${state.tab === "played" ? "Add a course you've teed it up on." : "Add a course you're dreaming of playing."}</p>
+              <button class="gcl-add" data-action="add" style="margin:0 auto">＋ Add course</button>
+            </div>` : `<div class="gcl-grid">${shown.map(card).join("")}</div>`}
+          ${state.courses.length ? `<button class="gcl-reset" data-action="clear">Clear all courses</button>` : ""}
+        </div>`}`;
+    }
+
+    function openForm(existing) {
+      const c = existing || { name: "", location: "", par: "", yardage: "", status: state.tab };
+      const overlay = document.createElement("div");
+      overlay.className = "gcl-overlay";
+      overlay.innerHTML = `
+        <div class="gcl-modal" role="dialog" aria-modal="true">
+          <h2>${existing ? "Edit course" : "Add a course"}</h2>
+          <div class="gcl-field"><label>Course name</label>
+            <input id="f-name" class="gcl-input" value="${esc(c.name)}" placeholder="e.g. Valhalla Golf Club"></div>
+          <div class="gcl-field"><label>Location</label>
+            <input id="f-loc" class="gcl-input" value="${esc(c.location)}" placeholder="e.g. Louisville, KY"></div>
+          <div class="gcl-row2">
+            <div class="gcl-field"><label>Par</label>
+              <input id="f-par" class="gcl-input" type="number" inputmode="numeric" value="${c.par ?? ""}" placeholder="72"></div>
+            <div class="gcl-field"><label>Yardage</label>
+              <input id="f-yds" class="gcl-input" type="number" inputmode="numeric" value="${c.yardage ?? ""}" placeholder="6800"></div>
+          </div>
+          <div class="gcl-field"><label>Status</label>
+            <div class="gcl-seg">
+              <button type="button" id="s-played" data-on="${c.status === "played"}">✓ Played</button>
+              <button type="button" id="s-wish" data-on="${c.status === "wishlist"}">⚑ Wishlist</button>
+            </div></div>
+          <div class="gcl-modal-actions">
+            <button class="gcl-btn-ghost" id="f-cancel">✕ Cancel</button>
+            <button class="gcl-btn-primary" id="f-save">${existing ? "Save changes" : "Add course"}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      let status = c.status;
+      const close = () => overlay.remove();
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+      overlay.querySelector("#s-played").onclick = () => { status = "played";
+        overlay.querySelector("#s-played").dataset.on = "true"; overlay.querySelector("#s-wish").dataset.on = "false"; };
+      overlay.querySelector("#s-wish").onclick = () => { status = "wishlist";
+        overlay.querySelector("#s-wish").dataset.on = "true"; overlay.querySelector("#s-played").dataset.on = "false"; };
+      overlay.querySelector("#f-cancel").onclick = close;
+      overlay.querySelector("#f-save").onclick = () => {
+        const name = overlay.querySelector("#f-name").value.trim();
+        if (!name) return;
+        const parV = overlay.querySelector("#f-par").value;
+        const ydsV = overlay.querySelector("#f-yds").value;
+        const rec = {
+          name,
+          location: overlay.querySelector("#f-loc").value.trim(),
+          par: parV === "" ? null : parseInt(parV, 10),
+          yardage: ydsV === "" ? null : parseInt(ydsV, 10),
+          status,
+        };
+        if (existing) patchCourse(existing.id, rec); else addCourse(rec);
+        state.tab = status;
+        close();
+      };
+      setTimeout(() => overlay.querySelector("#f-name").focus(), 30);
+    }
+
+    /* ---------- events ---------- */
+    document.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-tab]");
+      if (tabBtn) { state.tab = tabBtn.dataset.tab; render(); return; }
+      const actBtn = e.target.closest("[data-action]");
+      if (!actBtn) return;
+      const action = actBtn.dataset.action;
+      const id = actBtn.dataset.id;
+      const course = state.courses.find((c) => c.id === id);
+      if (action === "add") openForm(null);
+      else if (action === "edit" && course) openForm(course);
+      else if (action === "delete" && course) removeCourse(id);
+      else if (action === "move" && course) patchCourse(id, { status: course.status === "played" ? "wishlist" : "played" });
+      else if (action === "signout") db.auth.signOut();
+      else if (action === "clear") { if (confirm("Clear every course from your log? This can't be undone."))
+        Promise.all(state.courses.map((c) => db.from("courses").delete().eq("id", c.id))).then(fetchCourses); }
+    });
+
+    /* ---------- session routing ---------- */
+    function onSignedIn() {
+      render();
+      fetchCourses();
+      if (!subscribed) {
+        subscribed = true;
+        db.channel("courses-sync")
+          .on("postgres_changes", { event: "*", schema: "public", table: "courses" }, fetchCourses)
+          .subscribe();
+        window.addEventListener("focus", fetchCourses);
+      }
+    }
+
+    db.auth.getSession().then(({ data }) => {
+      session = data.session;
+      if (session) onSignedIn(); else renderAuth();
+    });
+    db.auth.onAuthStateChange((_event, s) => {
+      const was = !!session;
+      session = s;
+      if (session && !was) onSignedIn();
+      else if (!session) { subscribed = false; renderAuth(); }
+    });
+  }
+</script>
+</body>
+</html>
