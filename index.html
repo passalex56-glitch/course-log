@@ -19,6 +19,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <style>
   :root {
     --paper: #F3EEE3; --paper-edge: #E8E0D0; --ink: #15362B; --ink-soft: #2C4A3E;
@@ -132,6 +135,15 @@
   .gcl-reset { display: block; margin: 36px auto 0; background: transparent; border: 0; color: var(--muted);
     font-size: 11px; letter-spacing: 0.08em; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .gcl-loading { max-width: 960px; margin: 0 auto; padding: 60px 22px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  #gcl-map { height: min(560px, 70vh); border: 1px solid var(--line); border-radius: 4px; z-index: 0; }
+  .gcl-legend { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .gcl-legend .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+  .gcl-legend .dot.played { background: var(--ink); }
+  .gcl-legend .dot.wish { background: var(--flag); }
+  .gcl-geo { font-family: 'DM Mono', monospace; margin-left: 10px; }
+  .leaflet-popup-content { font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.45; }
+  .leaflet-popup-content strong { font-family: 'Playfair Display', serif; font-size: 15px; }
 
   /* sign-in + setup */
   .gcl-gate { min-height: 100vh; display: grid; place-items: center; padding: 22px; }
@@ -268,10 +280,14 @@
             <div class="gcl-tabs">
               <button class="gcl-tab" data-on="${state.tab === "played"}" data-tab="played">✓ Played</button>
               <button class="gcl-tab" data-on="${state.tab === "wishlist"}" data-tab="wishlist">⚑ Wishlist</button>
+              <button class="gcl-tab" data-on="${state.tab === "map"}" data-tab="map">◎ Map</button>
             </div>
             <button class="gcl-add" data-action="add">＋ Add course</button>
           </div>
-          ${shown.length === 0 ? `
+          ${state.tab === "map" ? `
+            <div id="gcl-map"></div>
+            <div class="gcl-legend"><span class="dot played"></span> Played &nbsp;&nbsp; <span class="dot wish"></span> Wishlist <span class="gcl-geo" id="gcl-geo"></span></div>
+          ` : shown.length === 0 ? `
             <div class="gcl-empty">
               <h3>${state.tab === "played" ? "No rounds logged yet" : "Nothing on the wishlist yet"}</h3>
               <p>${state.tab === "played" ? "Add a course you've teed it up on." : "Add a course you're dreaming of playing."}</p>
@@ -279,6 +295,7 @@
             </div>` : `<div class="gcl-grid">${shown.map(card).join("")}</div>`}
           ${state.courses.length ? `<button class="gcl-reset" data-action="clear">Clear all courses</button>` : ""}
         </div>`}`;
+      if (state.tab === "map") setTimeout(drawMap, 0);
     }
 
     function openForm(existing) {
@@ -337,6 +354,71 @@
       setTimeout(() => overlay.querySelector("#f-name").focus(), 30);
     }
 
+    /* ---------- map ---------- */
+    let mapInstance = null;
+    let geocoding = false;
+
+    function addMarker(c) {
+      if (!mapInstance) return;
+      const color = c.status === "played" ? "#15362B" : "#B23A2E";
+      const m = L.circleMarker([c.lat, c.lng], {
+        radius: 8, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1,
+      }).addTo(mapInstance);
+      const detail = [c.par ? "Par " + c.par : null, c.yardage ? Number(c.yardage).toLocaleString() + " yds" : null].filter(Boolean).join(" · ");
+      m.bindPopup(
+        `<strong>${esc(c.name)}</strong>` +
+        (c.location ? "<br>" + esc(c.location) : "") +
+        (detail ? "<br>" + detail : "") +
+        `<br><em>${c.status === "played" ? "Played" : "Wishlist"}</em>`
+      );
+    }
+
+    function fitToMarkers() {
+      const pts = state.courses.filter((c) => c.lat != null && c.lng != null).map((c) => [c.lat, c.lng]);
+      if (mapInstance && pts.length) mapInstance.fitBounds(pts, { padding: [40, 40], maxZoom: 11 });
+    }
+
+    function drawMap() {
+      const el = document.getElementById("gcl-map");
+      if (!el || typeof L === "undefined") return;
+      if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+      mapInstance = L.map(el, { scrollWheelZoom: false }).setView([38.5, -90], 5);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors", maxZoom: 18,
+      }).addTo(mapInstance);
+      state.courses.forEach((c) => { if (c.lat != null && c.lng != null) addMarker(c); });
+      fitToMarkers();
+      geocodeMissing();
+    }
+
+    async function geocodeMissing() {
+      if (geocoding) return;
+      const todo = state.courses.filter((c) => (c.lat == null || c.lng == null) && (c.location || c.name));
+      if (!todo.length) return;
+      geocoding = true;
+      const geoEl = document.getElementById("gcl-geo");
+      let done = 0;
+      for (const c of todo) {
+        if (geoEl) geoEl.textContent = `· locating courses… (${done}/${todo.length})`;
+        try {
+          const q = encodeURIComponent(c.location ? `${c.name}, ${c.location}` : c.name);
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
+          const data = await r.json();
+          if (data && data[0]) {
+            c.lat = parseFloat(data[0].lat);
+            c.lng = parseFloat(data[0].lon);
+            addMarker(c);
+            fitToMarkers();
+            db.from("courses").update({ lat: c.lat, lng: c.lng }).eq("id", c.id);
+          }
+        } catch (e) { /* skip this one */ }
+        done++;
+        await new Promise((res) => setTimeout(res, 1100)); // respect Nominatim rate limit
+      }
+      if (geoEl) geoEl.textContent = "";
+      geocoding = false;
+    }
+
     /* ---------- events ---------- */
     document.addEventListener("click", (e) => {
       const tabBtn = e.target.closest("[data-tab]");
@@ -362,7 +444,7 @@
       if (!subscribed) {
         subscribed = true;
         db.channel("courses-sync")
-          .on("postgres_changes", { event: "*", schema: "public", table: "courses" }, fetchCourses)
+          .on("postgres_changes", { event: "*", schema: "public", table: "courses" }, () => { if (!geocoding) fetchCourses(); })
           .subscribe();
         window.addEventListener("focus", fetchCourses);
       }
