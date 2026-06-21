@@ -19,7 +19,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-<script src="https://cdn.jsdelivr.net/npm/d3-geo@3"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 
 <style>
@@ -136,7 +136,7 @@
     font-size: 11px; letter-spacing: 0.08em; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .gcl-loading { max-width: 960px; margin: 0 auto; padding: 60px 22px; color: var(--muted); font-family: 'DM Mono', monospace; }
 
-  #gcl-map { width: 100%; border: 1px solid var(--line); border-radius: 4px; padding: 10px;
+  #gcl-map { width: 100%; min-height: 360px; border: 1px solid var(--line); border-radius: 4px; padding: 10px;
     background-color: #ece7da;
     background-image: radial-gradient(circle, rgba(21,54,43,0.06) 1.4px, transparent 1.6px);
     background-size: 13px 13px; }
@@ -393,9 +393,22 @@
 
     async function ensureTopo() {
       if (usTopo) return usTopo;
-      const r = await fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json");
-      usTopo = await r.json();
-      return usTopo;
+      const urls = [
+        "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json",
+        "https://unpkg.com/us-atlas@3/states-10m.json",
+      ];
+      for (const u of urls) {
+        try { const r = await fetch(u); if (r.ok) { usTopo = await r.json(); return usTopo; } } catch (e) { /* try next */ }
+      }
+      throw new Error("could not load US map data");
+    }
+
+    async function libsReady() {
+      for (let i = 0; i < 50; i++) {
+        if (typeof d3 !== "undefined" && typeof topojson !== "undefined") return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return typeof d3 !== "undefined" && typeof topojson !== "undefined";
     }
 
     function flagSVG(x, y, c, title) {
@@ -411,38 +424,38 @@
     async function drawMap() {
       const host = document.getElementById("gcl-map");
       if (!host) return;
-      if (typeof d3 === "undefined" || typeof topojson === "undefined") {
-        host.innerHTML = `<p style="padding:28px;color:var(--muted);font-family:'DM Mono',monospace">Map libraries didn't load — check your connection and reopen the Map tab.</p>`;
-        return;
-      }
-      let topo;
-      try { topo = await ensureTopo(); }
-      catch (e) { host.innerHTML = `<p style="padding:28px;color:var(--muted)">Couldn't load the US map data.</p>`; return; }
+      host.innerHTML = `<p style="padding:28px;color:var(--muted);font-family:'DM Mono',monospace">Drawing the map…</p>`;
+      try {
+        const ready = await libsReady();
+        if (!ready) throw new Error("map libraries didn't load (check connection)");
+        const topo = await ensureTopo();
+        const states = topojson.feature(topo, topo.objects.states);
+        const W = Math.max(320, host.clientWidth - 20 || 880);
+        const H = Math.round(W * 0.6);
+        const projection = d3.geoAlbersUsa().fitSize([W - 8, H - 8], states);
+        const path = d3.geoPath(projection);
 
-      const states = topojson.feature(topo, topo.objects.states);
-      const W = Math.max(320, host.clientWidth || 900);
-      const H = Math.round(W * 0.62);
-      const projection = d3.geoAlbersUsa().fitSize([W - 8, H - 8], states);
-      const path = d3.geoPath(projection);
+        let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+        svg += `<g transform="translate(4,4)">`;
+        states.features.forEach((f) => { const d = path(f); if (d) svg += `<path d="${d}" class="gcl-state"/>`; });
+        states.features.forEach((f) => {
+          const ctr = path.centroid(f);
+          if (ctr && !isNaN(ctr[0])) svg += `<text x="${ctr[0].toFixed(1)}" y="${ctr[1].toFixed(1)}" class="gcl-statelbl">${esc((f.properties && f.properties.name) || "")}</text>`;
+        });
+        state.courses.forEach((c) => {
+          if (c.lat != null && c.lng != null) {
+            const p = projection([+c.lng, +c.lat]);
+            if (p) svg += flagSVG(p[0], p[1], c, c.name + (c.location ? " — " + c.location : ""));
+          }
+        });
+        svg += `</g></svg>`;
+        host.innerHTML = svg;
 
-      let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
-      svg += `<g transform="translate(4,4)">`;
-      states.features.forEach((f) => { svg += `<path d="${path(f)}" class="gcl-state"/>`; });
-      states.features.forEach((f) => {
-        const ctr = path.centroid(f);
-        if (ctr && !isNaN(ctr[0])) svg += `<text x="${ctr[0].toFixed(1)}" y="${ctr[1].toFixed(1)}" class="gcl-statelbl">${esc((f.properties && f.properties.name) || "")}</text>`;
-      });
-      state.courses.forEach((c) => {
-        if (c.lat != null && c.lng != null) {
-          const p = projection([c.lng, c.lat]);
-          if (p) svg += flagSVG(p[0], p[1], c, c.name + (c.location ? " — " + c.location : ""));
+        if (!geocoding && state.courses.some((c) => (c.lat == null || c.lng == null) && !geoAttempted.has(c.id))) {
+          geocodeMissing();
         }
-      });
-      svg += `</g></svg>`;
-      host.innerHTML = svg;
-
-      if (!geocoding && state.courses.some((c) => (c.lat == null || c.lng == null) && !geoAttempted.has(c.id))) {
-        geocodeMissing();
+      } catch (e) {
+        host.innerHTML = `<p style="padding:28px;color:var(--muted);font-family:'DM Mono',monospace">Couldn't draw the map: ${esc(String((e && e.message) || e))}</p>`;
       }
     }
 
